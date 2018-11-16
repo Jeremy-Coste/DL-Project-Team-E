@@ -39,11 +39,14 @@ class OrderBook():
         self.size = self._messages.shape[0]
         self._timestamp_series = self._messages.index
         
-    def get_midprice_data(self, numupdates=None, timeunit=None, t_start=34200.1, t_end=57599.9):
+    def get_midprice_data(self, numupdates=None, timeunit=None, t_start=34200.1,
+                          t_end=57599.9, tick_size=None):
         '''
         Here we compute midprices, and store y(previous), y(current), and y(next)
         If we wish to slice by time, set by_message_updates = False and
                 enter timeunit=1 for seconds, 1e-3 for microseconds and so on
+        If we do not want to count oversized tick movements as midprice movements, 
+        set ticksize to typical tick size.
         '''
         if t_start < self.tstart or t_end > self.tend:
             raise Exception("Invalid time")
@@ -53,7 +56,9 @@ class OrderBook():
             raise Exception("Must set either numupdates or timeunit but not both")
             
         midprices = pd.DataFrame((self._limit_order_book['ap1'] + self._limit_order_book['bp1'])/2.0,
-                                     index= self._limit_order_book.index, columns=['midprice'])
+                                  index= self._limit_order_book.index, columns=['midprice'])
+        midprices['ap1'] = self._limit_order_book['ap1']
+        midprices['bp1'] = self._limit_order_book['bp1']
         if timeunit is None:
             midprices = midprices.iloc[0::numupdates]
             midprices = midprices.loc[t_start:t_end]
@@ -81,7 +86,7 @@ class OrderBook():
             while(count < len(midprices)):
                 t += timeunit
                 if(t > midprices.index[count]):
-                    new_mid = midprices.values[count, 0]
+                    new_mid = midprices.values[count]
                     count += 1
                     timestamps += [t]
                     prices += [new_mid]
@@ -91,12 +96,21 @@ class OrderBook():
                 timestamps += [t]
                 prices += [new_mid]
                 
-            midprices = pd.DataFrame(prices, index=timestamps, columns=['midprice'])
+            midprices = pd.DataFrame(prices, index=timestamps, columns=['midprice', 'ap1', 'bp1'])
             midprices.index.name = 'timestamp'
             midprices = midprices.loc[t_start:t_end]
                 
                 
         midprices['y_0'] = np.sign(midprices['midprice'] - midprices['midprice'].shift(1)) 
+        if not tick_size is None:
+            '''
+            we only count midprice movements that moved a full tick or more,
+            or moved when spread during last state was 1 tick wide 
+            '''
+            bools = (((midprices['ap1'].shift(1) - midprices['bp1'].shift(1)) <= tick_size*1.01)|
+                     (abs(midprices['midprice'] - midprices['midprice'].shift(1))*1.01 >= tick_size))
+            
+            midprices['y_0'] *= bools.astype(int)
         midprices['y_1'] = midprices['y_0'].shift(-1)
         midprices['y_prev'] = midprices['y_0'].shift(1)
 
@@ -115,6 +129,23 @@ class OrderBook():
         self._limit_order_book['timestamp'] = self._messages['timestamp']
         self._messages.set_index('timestamp', inplace=True)
         self._limit_order_book.set_index('timestamp', inplace=True)
+    
+    def get_bid_ask(self, timestamp):
+        '''get best bid and ask at given timestamp'''
+        ref_time = self._limit_order_book.loc[:timestamp].index[-1]
+        
+        #get index position so we can grab data from orderbook dataframes more quickly
+        index_pos = self._limit_order_book.index.get_loc(ref_time)
+        
+        #always assume if looking up an existing time in dataframe we look at "last" value at that time
+        if isinstance(index_pos, slice):
+            index_pos = index_pos.stop - 1
+        
+        book_state = self._limit_order_book.values[index_pos]
+        best_bid = book_state[2]
+        best_ask = book_state[0]
+        
+        return (best_bid, best_ask)
     
     def get_message(self, position):
         return self._messages.values[position]

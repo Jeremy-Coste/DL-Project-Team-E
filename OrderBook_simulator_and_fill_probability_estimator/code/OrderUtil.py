@@ -155,7 +155,8 @@ class Order():
         for i in range(k, 4*self._orderbook.num_levels(), 4):
             if self._price < book_state[i]:
                 self._level = int((i - k)/4) + 1
-                self._price_delta = self._price - book_state[i]
+                self._price_delta = book_state[i] - self._price
+                self._price = book_state[i]
                 self._set_col_labels()
                 self._set_reference_id()
                 self._queue_position = 1
@@ -248,12 +249,15 @@ class Order():
     def get_current_stats(self):
         return {'price' : self._price, 'time' : self._t, 'is_buy': self._is_buy,
                 'orderstate' : self._orderstate, 'level' : self._level,
-                'end_index': self._index_pos, 'price_delta' : self._price_delta}
+                'current_index': self._index_pos, 'price_delta' : self._price_delta}
     
     def get_closing_stats(self):
         return {'price' : self._price, 'time' : self._t_end, 'is_buy': self._is_buy,
                 'orderstate' : self._orderstate, 'level' : self._level,
                 'end_index': self._end_index, 'price_delta' : self._price_delta}
+    
+    def get_order_price(self):
+        return self._price + self._price_delta
               
 
 class TimeOrder(Order):
