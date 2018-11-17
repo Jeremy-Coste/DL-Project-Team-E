@@ -1,4 +1,3 @@
-
 # coding: utf-8
 
 # In[ ]:
@@ -30,11 +29,16 @@ class TradingStrategyBacktester:
         else:
             self._timeupdates = False
             self._unit = numupdates
+            
+        self._y1_ind = self._midprice_df.columns.get_loc('y_1')
+        self._bp1_ind = self._midprice_df.columns.get_loc('bp1')
+        self._ap1_ind = self._midprice_df.columns.get_loc('ap1')
+        self._ypred_ind = self._midprice_df.columns.get_loc('y_predict')
     
-    def _place_and_eval_orders(self, y_pred, ind, next_ind):
+    def _place_and_eval_orders(self, y_pred, ind):
         if not self._strategy[y_pred]:
             return 0.0
-        
+        current_time = self._midprice_df.index[ind]
         active_strategy = self._strategy[y_pred]
         bids_list = active_strategy[0]
         asks_list = active_strategy[1]
@@ -42,25 +46,25 @@ class TradingStrategyBacktester:
         ask_orders = {}
         for bid in bids_list:
             if self._timeupdates:
-                bid_orders[bid] = ou.TimeOrder(self._orderbook, timestamp=ind, level=bid,
+                bid_orders[bid] = ou.TimeOrder(self._orderbook, timestamp=current_time, level=bid,
                                                is_buy=True, delta_t=self._unit)
                 bid_orders[bid].update()
             else:
-                bid_orders[bid] = ou.BookUpdatesOrder(self._orderbook, timestamp=ind, level=bid,
+                bid_orders[bid] = ou.BookUpdatesOrder(self._orderbook, timestamp=current_time, level=bid,
                                                       is_buy=True, numupdates=self._unit)
                 bid_orders[bid].update()
         for ask in asks_list:
             if self._timeupdates:
-                ask_orders[ask] = ou.TimeOrder(self._orderbook, timestamp=ind, level=ask,
+                ask_orders[ask] = ou.TimeOrder(self._orderbook, timestamp=current_time, level=ask,
                                                is_buy=False, delta_t=self._unit)
                 ask_orders[ask].update()
             else:
-                ask_orders[ask] = ou.BookUpdatesOrder(self._orderbook, timestamp=ind, level=ask,
+                ask_orders[ask] = ou.BookUpdatesOrder(self._orderbook, timestamp=current_time, level=ask,
                                                       is_buy=False, numupdates=self._unit)
                 ask_orders[ask].update()
                 
-        mkt_bid_ask = (self._midprice_df.loc[next_ind, 'bp1'],
-                       self._midprice_df.loc[next_ind, 'ap1'])
+        mkt_bid_ask = (self._midprice_df.values[ind + 1, self._bp1_ind],
+                       self._midprice_df.values[ind + 1, self._ap1_ind])
         long_position = 0.0
         short_position = 0.0
         cash_flow = 0.0
@@ -93,16 +97,23 @@ class TradingStrategyBacktester:
             tend = self._tend
             
         start_ind = self._midprice_df.index.get_loc(tstart)
+        if isinstance(start_ind, slice):
+            start_ind = start_ind.stop - 1
+            
         end_ind = self._midprice_df.index.get_loc(tend)
+        if isinstance(end_ind, slice):
+            end_ind = end_ind.stop - 1
         
         self._pnl_ser = pd.Series()
         self._pnl_ser.index.name = 'timestamp'
         self._pnl_ser.loc[tstart] = 0.0
-        ind = sorted(self._midprice_df.iloc[start_ind + 1: end_ind + 1].index.tolist())
-        for i in range(len(ind) - 1):
-            y_pred = self._midprice_df.loc[ind[i], 'y_predict']
-            pnl = self._place_and_eval_orders(y_pred, ind[i], ind[i+1])
-            self._pnl_ser.loc[ind[i]] = pnl
+        for i in range(start_ind, end_ind):
+            y_pred = self._midprice_df.values[i, self._ypred_ind]
+            pnl = self._place_and_eval_orders(y_pred, i)
+            time = self._midprice_df.index[i + 1]
+            if (i - start_ind) % 1000 == 0:
+                print('up to update number: ' + str(i - start_ind))
+            self._pnl_ser.loc[self._midprice_df.index[i + 1]] = pnl
         
     
     def get_pnl_series(self):

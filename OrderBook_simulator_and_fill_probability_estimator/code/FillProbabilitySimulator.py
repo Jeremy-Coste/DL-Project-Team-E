@@ -59,17 +59,20 @@ class FillProbabilitySimulator:
             self._unit = numupdates
             
         self._quantity = {-1: 0, 0:0, 1:0}
+        self._y1_ind = self._midprice_df.columns.get_loc('y_1')
+        self._bp1_ind = self._midprice_df.columns.get_loc('bp1')
+        self._ap1_ind = self._midprice_df.columns.get_loc('ap1')
     
     def _generate_order_pair(self, mid=0):
         if self._uniform_sampling:
             rand_int = np.random.randint(1, len(self._split_midprice_to_sample[mid]) - 2)
             rand_int = self._split_midprice_to_sample[mid].index[rand_int]
-            midprice_movement = self._midprice_df.values[rand_int, 4]
+            midprice_movement = self._midprice_df.values[rand_int, self._y1_ind]
             if(midprice_movement != mid):
                 raise Exception("problem with importance sampling")
         else:
             rand_int = np.random.randint(1, self._N - 2)
-            midprice_movement = self._midprice_df.values[rand_int, 4]
+            midprice_movement = self._midprice_df.values[rand_int, self._y1_ind]
         timestamp = self._midprice_df.index[rand_int]
         self._bid_orders = []
         self._ask_orders = []
@@ -124,8 +127,8 @@ class FillProbabilitySimulator:
         return True
     
     def _get_pnl(self, next_ind):
-        mkt_bid_ask = (self._midprice_df.values[next_ind, 2],
-                       self._midprice_df.values[next_ind, 1])
+        mkt_bid_ask = (self._midprice_df.values[next_ind, self._bp1_ind],
+                       self._midprice_df.values[next_ind, self._ap1_ind])
         long_position = 0.0
         short_position = 0.0
         cash_flow = 0.0

@@ -58,7 +58,9 @@ class OrderBook():
         midprices = pd.DataFrame((self._limit_order_book['ap1'] + self._limit_order_book['bp1'])/2.0,
                                   index= self._limit_order_book.index, columns=['midprice'])
         midprices['ap1'] = self._limit_order_book['ap1']
+        midprices['aq1'] = self._limit_order_book['aq1']
         midprices['bp1'] = self._limit_order_book['bp1']
+        midprices['bq1'] = self._limit_order_book['bq1']
         if timeunit is None:
             midprices = midprices.iloc[0::numupdates]
             midprices = midprices.loc[t_start:t_end]
