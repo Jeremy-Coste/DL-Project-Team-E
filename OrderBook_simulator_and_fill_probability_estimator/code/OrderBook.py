@@ -11,7 +11,7 @@ import math
 
 class OrderBook():
     '''class to hold our orderbook and orderbook messages'''
-    def __init__(self, message_filename, orderbook_filename, path=os.getcwd()):
+    def __init__(self, message_filename, orderbook_filename, path=os.getcwd(), memory_size=10):
         '''
         messsages contains all updates to limit order book
         limit_order_book contains the state of the book at all timestamps
@@ -38,6 +38,12 @@ class OrderBook():
         
         self.size = self._messages.shape[0]
         self._timestamp_series = self._messages.index
+        
+        self._memory_size = memory_size
+        self._stored_keys = {'book': set(), 'messages': set(), 'timestamps': set()}
+        self._stored_timestamps = {}
+        self._stored_bookstates = {}
+        self._stored_messages = {}
         
     def get_midprice_data(self, numupdates=None, timeunit=None, t_start=34200.1,
                           t_end=57599.9, tick_size=None, next_move=False):
@@ -160,13 +166,36 @@ class OrderBook():
         return (best_bid, best_ask)
     
     def get_message(self, position):
-        return self._messages.values[position]
+        if not position in self._stored_messages:
+            if len(self._stored_keys['messages']) > self._memory_size:
+                ind_to_delete = min(self._stored_keys['messages'])
+                del self._stored_messages[ind_to_delete]
+                self._stored_keys['messages'].remove(ind_to_delete)
+            self._stored_messages[position] = self._messages.values[position]
+            self._stored_keys['messages'].add(position)
+            
+            
+        return self._stored_messages[position]
     
     def get_book_state(self, position):
-        return self._limit_order_book.values[position]
+        if not position in self._stored_bookstates:
+            if len(self._stored_keys['book']) > self._memory_size:
+                ind_to_delete = min(self._stored_keys['book'])
+                del self._stored_bookstates[ind_to_delete]
+                self._stored_keys['book'].remove(ind_to_delete)
+            self._stored_bookstates[position] = self._limit_order_book.values[position]
+            
+            
+        return self._stored_bookstates[position]
     
     def get_current_time(self, position):
-        return self._timestamp_series.values[position]
+        if not position in self._stored_timestamps:
+            if len(self._stored_keys['timestamps']) > self._memory_size:
+                ind_to_delete = min(self._stored_keys['timestamps'])
+                del self._stored_timestamps[ind_to_delete]
+                self._stored_keys['timestamps'].remove(ind_to_delete)
+            self._stored_timestamps[position] = self._timestamp_series.values[position]
+            
         
     def limit_order_book(self):
         return self._limit_order_book;
@@ -179,5 +208,13 @@ class OrderBook():
     
     def num_levels(self):
         return self._n
+    
+    def clear_memory(self):
+        self._stored_keys = {'book': set(), 'messages': set(), 'timestamps': set()}
+        self._stored_timestamps = {}
+        self._stored_bookstates = {}
+        self._stored_messages = {}
+        
+        
         
 

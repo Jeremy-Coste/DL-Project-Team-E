@@ -267,9 +267,6 @@ class TradingStrategyBacktester:
         if isinstance(end_ind, slice):
             end_ind = end_ind.stop - 1
         
-        self._pnl_ser = pd.Series()
-        self._pnl_ser.index.name = 'timestamp'
-        self._pnl_ser.loc[tstart] = 0.0
         y_actual = {}
         y_actual[-1] = None
         y_actual[0] = self._midprice_df.values[start_ind, self._y0_ind]
@@ -278,6 +275,7 @@ class TradingStrategyBacktester:
         y_pred[0] = self._midprice_df.values[start_ind, self._predict_ind]
         self._close = False
         cum_pnl = 0
+        pnl_ser =  [0.0]
         for i in range(start_ind, end_ind - 1):
             if i == end_ind - 2:
                 self._close = True
@@ -294,18 +292,22 @@ class TradingStrategyBacktester:
             
             midprice = self._midprice_df.values[i + 1, self._mid_ind]
             adjust = self._long_position*midprice - self._short_position*midprice
-            self._pnl_ser.loc[time] = cum_pnl + adjust
+            pnl_ser += [cum_pnl + adjust]
             
             y_pred[-1] = y_pred[0]
             y_actual[-1] = y_actual[0]
             y_pred[0] = y_pred[1]
             y_actual[0] = y_actual[1]
-            if (i - start_ind) % 1000 == 0:
+            if (i - start_ind) % 10000 == 0:
                 print('Current time:        ' + str(time))
-                print('Current pnl: ' + str(self._pnl_ser.loc[time]))
-                     
+                print('Current pnl: ' + str(cum_pnl + adjust))
+                
+        self._pnl_ser = pd.Series()
+        self._pnl_ser.index.name = 'timestamp'
+        self._pnl_ser = pd.Series(pnl_ser, index=self._midprice_df.index[start_ind:end_ind])             
         self._pnl_ser = self._pnl_ser - self._pnl_ser.shift(1)
         self._pnl_ser.fillna(0.0, inplace=True)
+        self._orderbook.clear_memory()
             
     def get_cumulative_pnl_series(self):
         return self._pnl_ser.cumsum()
@@ -361,8 +363,10 @@ class StrategyLossEstimation():
             if self._num_per_sample[key] <= 0:
                 raise Exception("No movements of type: " + str(key))
         self._pnls = pd.Series()
-        self._strategy_simulator.run_strategy()
         self._strategy = strategy
+        
+    def run_strategy_simulation(self):
+        self._strategy_simulator.run_strategy()
         
     def get_pnl_series(self):
         return self._strategy_simulator.get_pnl_series()
