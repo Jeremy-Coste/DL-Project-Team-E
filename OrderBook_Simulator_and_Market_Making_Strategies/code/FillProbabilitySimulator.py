@@ -16,7 +16,7 @@ import OrderUtil as ou
 '''class to build the fill probability matrix and pnls for given trades'''
 class FillProbabilitySimulator:
     def __init__(self, orderbook, order_tuple, numupdates=None, timeunit=None,
-                 t_start=3420.01, t_end=57600, uniform_sampling=True, midprice_df=None, ticks=None, rel_queue=None):
+                 t_start=3420.01, t_end=57600, uniform_sampling=True, midprice_df=None, ticks=None):
         '''
         Ordertuple is represented as follows:
         (list_of_bid_levels, list_of_ask_levels) are the levels we would like to place orders
@@ -24,7 +24,6 @@ class FillProbabilitySimulator:
         self._uniform_sampling = uniform_sampling
         self._orderbook = orderbook
         self._ticks = ticks
-        self._relative_queue = rel_queue
         if midprice_df is None:
             self._midprice_df = self._orderbook.get_midprice_data(numupdates=numupdates, timeunit=timeunit,
                                                                   t_start=t_start, t_end=t_end, tick_size=self._ticks)
@@ -81,20 +80,18 @@ class FillProbabilitySimulator:
             #create our orders
             for i in range(self._shape_orders[0]):
                 self._bid_orders += [ou.TimeOrder(self._orderbook, timestamp=timestamp, level=self._order_tuple[0][i],
-                                                  is_buy=True, delta_t=self._unit, relative_queue=self._relative_queue)]
+                                                  is_buy=True, delta_t=self._unit)]
                 
             for i in range(self._shape_orders[1]):
                 self._ask_orders += [ou.TimeOrder(self._orderbook, timestamp=timestamp, level=self._order_tuple[1][i],
-                                                  is_buy=False, delta_t=self._unit, relative_queue=self._relative_queue)]
+                                                  is_buy=False, delta_t=self._unit)]
         else:
             for i in range(self._shape_orders[0]):
                 self._bid_orders += [ou.BookUpdatesOrder(self._orderbook, timestamp=timestamp, level=self._order_tuple[0][i],
-                                                         is_buy=True, numupdates=self._unit,
-                                                         relative_queue=self._relative_queue)]
+                                                         is_buy=True, numupdates=self._unit)]
             for i in range(self._shape_orders[1]):
                 self._ask_orders += [ou.BookUpdatesOrder(self._orderbook, timestamp=timestamp, level=self._order_tuple[1][i],
-                                                         is_buy=False, numupdates=self._unit,
-                                                         relative_queue=self._relative_queue)]
+                                                         is_buy=False, numupdates=self._unit)]
         return midprice_movement, rand_int
     
     def _evaluate_order_pair(self, midprice_type):
@@ -237,12 +234,12 @@ class FillProbabilitySimulator:
 class LossFunction:
     '''class used to build our loss function for a given trading strategy'''
     def __init__(self, strategy, book, numupdates=None, timeunit=None,
-                 t_start=34200.01, t_end=57600, uniform_sampling=True, ticks=None, rel_queue=None):
+                 t_start=34200.01, t_end=57600, uniform_sampling=True, ticks=None):
         '''
         get the loss function for a given trading strategy
         Strategy is a dict of the form: {y_hat: ([bids_list], [asks_list])} for each yhat value. 
         '''
-        self._relative_queue = rel_queue
+        
         self._strategy = strategy
         self._uniform_sampling = uniform_sampling
         self._numupdates = numupdates
@@ -272,8 +269,7 @@ class LossFunction:
                                                            t_start=self._t_start, ticks=self._ticks,
                                                            orderbook=self._orderbook,
                                                            midprice_df=self._midprice_df,
-                                                           uniform_sampling=self._uniform_sampling,
-                                                           rel_queue=self._relative_queue)
+                                                           uniform_sampling=self._uniform_sampling)
             
             self._probsimulator.generate_matrices(num_samples)
             self._loss_matrix.loc[key] = -1.0*self._probsimulator.get_pnls().values

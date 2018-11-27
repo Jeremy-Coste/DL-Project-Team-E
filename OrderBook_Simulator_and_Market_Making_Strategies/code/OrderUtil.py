@@ -12,7 +12,7 @@ import math
 
 class Order():
     '''base class to track and execute our orders'''
-    def __init__(self, orderbook, timestamp, level, is_buy, relative_queue=None, index_ref=None):
+    def __init__(self, orderbook, timestamp, level, is_buy, index_ref=None):
         '''
         when order is placed we create the order object
         in cases where the entered timestamp is exactly equal to an order in the book, 
@@ -51,9 +51,7 @@ class Order():
         self._queue_start = self._queue_position
         self._num_updates = 0
         self._set_reference_id()
-        
-        #if we are within relative queue % toward front of queue we execute
-        self._relative_queue = relative_queue
+
         
     def _set_col_labels(self):
         if self._is_buy:
@@ -70,22 +68,13 @@ class Order():
     #order ids are in conviniently in order of orderflow
     #so no need to randomize cancellations/exeution queue position!
     def _set_reference_id(self):
-        ind = max(self._index_pos - 1, 0)
+        ind = self._index_pos + 1
         set_id = False
-        while(ind >= 0):
-            message = self._orderbook.get_message(ind)
-            if message[0] == 1:
-                self._order_reference_id = message[1] + 0.5
-                set_id = True
-                break
-            ind -= 1
-        if set_id:
-            return
-        #may occur if in real beginning of orderbook
-        ind = 0
-        while(not set_id):
-            print("warning: at start of orderbook")
-            message = self._orderbook.get_message(ind)
+        while(True):
+            try:
+                message = self._orderbook.get_message(ind)
+            except:
+                raise Exception("reference id not set")
             if message[0] == 1:
                 self._order_reference_id = message[1] - 0.5
                 set_id = True
@@ -164,13 +153,7 @@ class Order():
         raise Exception("Unhandled case exists")
         
     def _check_queue(self, book_state):
-        #if we hit the front of the queue and we are at level 1 consider as executed
-        if not self._relative_queue is None:
-            current_rel_queue = 1.0*self._queue_position/(1.0*book_state[self._label_quantity])
-            if current_rel_queue <= self._relative_queue and self._level == 1:
-                self._orderstate = "executed"
-                self._set_closing_stats(self._t, self._index_pos)
-                return True       
+        #if we hit the front of the queue and we are at level 1 consider as executed     
         if self._queue_position <= 0 and self._level == 1:
             self._orderstate = "executed"
             self._set_closing_stats(self._t, self._index_pos)
@@ -303,14 +286,14 @@ class Order():
     
     def cancel_order(self):
         if self._orderstate == 'open':
-            self._orderstate == 'cancelled'
+            self._orderstate = 'cancelled'
     
 class TimeOrder(Order):
     '''Use this class for strategies that reevaluate orders by given timestep delta_t (in seconds)'''
     def __init__(self, orderbook, timestamp, level, is_buy, delta_t,
-                 index_ref=None, relative_queue=None):
+                 index_ref=None):
         Order.__init__(self, orderbook, timestamp, level, is_buy,
-                       index_ref=index_ref, relative_queue=relative_queue)
+                       index_ref=index_ref)
         self._dt = delta_t
         self._time_to_step = self._t_start
         
@@ -323,9 +306,9 @@ class TimeOrder(Order):
     
 class BookUpdatesOrder(Order):
     '''use this class for strategies that reevaluate orders by number updates to limit order book'''
-    def __init__(self, orderbook, timestamp, level, is_buy, numupdates, index_ref=None, relative_queue=None):
+    def __init__(self, orderbook, timestamp, level, is_buy, numupdates, index_ref=None):
         Order.__init__(self, orderbook, timestamp, level, is_buy,
-                       index_ref=index_ref, relative_queue=relative_queue)
+                       index_ref=index_ref)
         self._numupdates = numupdates
         self._index_to_step = self._start_index
         
@@ -336,12 +319,12 @@ class BookUpdatesOrder(Order):
 
 class IndexTrackedOrder(Order):
     '''use this class for strategies that build orders around a given index_reference series for backtesting'''
-    def __init__(self, orderbook, level, is_buy, index_ser, ind_start, relative_queue=None):
+    def __init__(self, orderbook, level, is_buy, index_ser, ind_start):
         self._index_ser = index_ser.astype(int)
         self._current_index_ref = ind_start
         self._book_position = self._index_ser.values[self._current_index_ref]
         Order.__init__(self, orderbook=orderbook, level=level, is_buy=is_buy, index_ref=self._book_position,
-                       timestamp=self._index_ser.index[0], relative_queue=relative_queue)
+                       timestamp=self._index_ser.index[ind_start])
         
         
     def update(self):
