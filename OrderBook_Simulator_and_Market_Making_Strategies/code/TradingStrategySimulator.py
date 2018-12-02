@@ -13,22 +13,42 @@ import OrderUtil as ou
 # coding: utf-8
 class TradingStrategyBacktester: 
     '''Class to backtest our trading strategy'''
-    def __init__(self, book, strategy, predictions, midprice_df, 
+    def __init__(self, book, strategy, midprice_df, latency=(0, 0),
                  set_edge_queue=None, tick_size=None,
                  max_exposure_dict={0:0, 1:0, -1:0}):
         '''
         Initialize backtester, strategy is a dict of the form: {y_hat: ([bids_list], [asks_list])}
         for each yhat value. 
         '''
+        self._latency = latency
         self._active = 0
         self._activate_bidask = [False, False]
         self._cancel_bidask = [False, False]
-       
+        self._midprice_df = midprice_df.copy()
+        
         self._mkt_move = False  
         self._tick_size = tick_size
         self._orderbook = book
-        self._midprice_df = midprice_df.copy()
-        self._midprice_df.loc[:, 'y_predict'] = predictions.values
+        
+        #latency[0] refers to the delay in quotes that we receive
+        if latency[0] > 0:
+            pred = self._midprice_df['y_predict']
+
+            new_ind = [pred.index[i] + latency[0] for i in range(len(self._midprice_df))]
+            pred = pred.reindex_axis(new_ind, method='ffill')
+            pred = pred.reindex_axis(self._midprice_df.index, method='ffill')
+            self._midprice_df['y_predict'] = pred
+
+        self._midprice_df.dropna(inplace=True)
+
+        #latency[1] is the delay in sending/receiving orders...
+        if latency[1] > 0:
+            new_ind = []
+            self._midprice_df['timestamp'] = [math.ceil(ind/latency[1])*latency[1] 
+                                              for ind in self._midprice_df.index]
+            self._midprice_df.drop_duplicates(subset='timestamp', keep='last', inplace=True)
+            self._midprice_df.set_index('timestamp', inplace=True, drop=True)
+
         for col in self._midprice_df.columns:
             self._midprice_df[col] = self._midprice_df[col].astype(int)
         self._strategy = strategy
@@ -36,13 +56,14 @@ class TradingStrategyBacktester:
         self._tend = self._midprice_df.index.max()
         self._bid_orders = {}
         self._ask_orders = {}
+        
+        #indices stored for faster lookup
         self._mov_ind = self._midprice_df.columns.get_loc('movement')
         self._bp1_ind = self._midprice_df.columns.get_loc('bp1')
         self._ap1_ind = self._midprice_df.columns.get_loc('ap1')
         self._bq1_ind = self._midprice_df.columns.get_loc('bq1')
         self._aq1_ind = self._midprice_df.columns.get_loc('aq1')
         self._predict_ind = self._midprice_df.columns.get_loc('y_predict')
-        self._index_ind = self._midprice_df.columns.get_loc('index_position')
         self._mid_ind = self._midprice_df.columns.get_loc('midprice')
         self._y0_ind = self._midprice_df.columns.get_loc('y_0')
         #set exposure levels
@@ -91,8 +112,9 @@ class TradingStrategyBacktester:
             self._close = True
             self._spread_signal = 0
             self._arrange_keys()
-                 
-        self._spread_signal += y_pred[0]
+            
+        if self._mkt_spread:      
+            self._spread_signal += y_pred[0]
                     
             
     def _activate_and_deactivate_strategy(self, ind, y_pred, y_actual):
@@ -171,7 +193,7 @@ class TradingStrategyBacktester:
             
             self._bid_orders[bid] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=bid,
                                                          index_ser=self._midprice_df['index_position'],
-                                                         ind_start=ind,
+                                                         ind_start=ind + 1,
                                                          is_buy=True) 
         for ask in asks_to_add:
             if ask in self._ask_orders or ask == 1:
@@ -179,7 +201,7 @@ class TradingStrategyBacktester:
             
             self._ask_orders[ask] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=ask,
                                                          index_ser=self._midprice_df['index_position'],
-                                                         ind_start=ind,
+                                                         ind_start=ind + 1,
                                                          is_buy=False)
                  
     def _place_level_1_orders(self, ind, y_pred, y_actual):
@@ -200,7 +222,7 @@ class TradingStrategyBacktester:
                 if self._spread_signal > 0 or self._activate_bidask[0]:
                     self._bid_orders[1] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=1,
                                                                index_ser=self._midprice_df['index_position'],
-                                                               ind_start=ind,
+                                                               ind_start=ind + 1,
                                                                is_buy=True)
                     
                     new_bid = True
@@ -211,7 +233,7 @@ class TradingStrategyBacktester:
                 if self._spread_signal < 0 or self._activate_bidask[1]:
                     self._ask_orders[1] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=1,
                                                                index_ser=self._midprice_df['index_position'],
-                                                               ind_start=ind,
+                                                               ind_start=ind + 1,
                                                                is_buy=False)
                     new_ask = True
                     self._activate_bidask[1] = False
@@ -232,12 +254,16 @@ class TradingStrategyBacktester:
                 
         self._arrange_keys()
         
-    def _update_orders(self):
+    def _update_orders(self, ind):
         #now we update our orders to next step
         for bid in self._bid_orders:
-            self._bid_orders[bid].update()
+            while(self._bid_orders[bid].get_current_index() < ind + 1):
+                self._bid_orders[bid].update()
         for ask in self._ask_orders:
-            self._ask_orders[ask].update()
+            while(self._ask_orders[ask].get_current_index() < ind + 1):
+                self._ask_orders[ask].update()
+            
+        #cancel orders if still possible...
         if self._cancel_bidask[0]:
             self._bid_orders[1].cancel_order()
             self._cancel_bidask[0] = False
@@ -272,10 +298,7 @@ class TradingStrategyBacktester:
         mkt_bid_ask = (self._midprice_df.values[ind + 1, self._bp1_ind],
                    self._midprice_df.values[ind + 1, self._ap1_ind])
         
-            
-         
-                  
-            
+    
         #net long
         if self._long_position > self._short_position:
             num_to_close = 0
@@ -325,7 +348,7 @@ class TradingStrategyBacktester:
         self._place_level_1_orders(ind, y_pred, y_actual)
         
         #now we step to ind + 1
-        self._update_orders()
+        self._update_orders(ind)
         cash_flow += self._execute_orders(ind, y_pred, y_actual)
         cash_flow += self._close_positions(ind, y_pred, y_actual)
                  
@@ -370,6 +393,7 @@ class TradingStrategyBacktester:
             adjust = self._long_position*midprice - self._short_position*midprice
             pnl_ser += [cum_pnl + adjust]
             
+            
             y_pred[-1] = y_pred[0]
             y_actual[-1] = y_actual[0]
             y_pred[0] = y_pred[1]
@@ -395,7 +419,7 @@ class TradingStrategyBacktester:
 class BacktesterSimulator():
     '''given a strategy we build a simulator to simulate pnl perfomance for given midprice prediction accuracy'''
     def __init__(self, book, strategy, midprice_df,
-                 set_edge_queue=False, tick_size=None, 
+                 set_edge_queue=False, tick_size=None, latency=(0, 0), 
                  max_exposure_dict={0:0, 1:0, -1:0}, accuracy_rate=None):
         #randomize our predictions
         simulator_help = {}
@@ -412,14 +436,15 @@ class BacktesterSimulator():
                                             else simulator_help[self._midprice_movement.values[i]][bernoulli_generator[i]]
                                             for i in range(len(midprice_df))], index=midprice_df.index)
         
+        midprice_df['y_predict'] = self._rand_predictions
+        
                                            
         #build backtester based on random predictions
         self._strategy_simulator = TradingStrategyBacktester(book=book, strategy=strategy,
-                                                             predictions=self._rand_predictions,
                                                              midprice_df=midprice_df,
                                                              set_edge_queue=set_edge_queue,
                                                              max_exposure_dict=max_exposure_dict,
-                                                             tick_size=tick_size)
+                                                             tick_size=tick_size, latency=latency)
         #rand predict and midprice movement have same index
         self._midprice_movement = self._strategy_simulator._midprice_df['y_1'].copy()
         self._rand_predictions = self._strategy_simulator._midprice_df['y_predict'].copy()

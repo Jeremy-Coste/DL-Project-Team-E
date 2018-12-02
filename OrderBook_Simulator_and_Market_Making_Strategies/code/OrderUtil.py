@@ -333,5 +333,8 @@ class IndexTrackedOrder(Order):
         while(self._index_pos < self._book_position and self._orderstate == "open"):
             self._process_message()
             
+    def get_current_index(self):
+        return self._current_index_ref
+            
                         
         
