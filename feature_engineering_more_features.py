@@ -104,6 +104,7 @@ This feature is derived from paper: Angelo Ranaldo..._Order aggressiveness in li
 '''
 total_data['relative_spread'] = (total_data['actual_spread'] / total_data['mid_price']) * 1000
 
+"""
 #-- new feature 8: volatility (could try different lagged periods)
 '''
 The volatility is the standard deviation of the last 50 midquote returns then divided by 100
@@ -111,6 +112,7 @@ This feature is derived from paper: Angelo Ranaldo..._Order aggressiveness in li
 '''
 total_data['mid_price_return'] = total_data['mid_price'].shift(-1) - total_data['mid_price']
 total_data['volatility'] = (total_data['mid_price_return'].rolling(50, min_periods = 1).std()) / 100
+"""
 
 #-- new feature 9: limit order aggressiveness (could try different lagged periods)
 '''
@@ -175,8 +177,22 @@ total_data['effective_spread'] = (total_data['lastest_trade_price'] / total_data
 
 
 #-- export total_data
-new_features_resultpath = '/Users/meihuaren/personal/OR_2018fall/Courses/E4720 Deep Learning/project_coding/Team E_code/'
+#new_features_resultpath = '/Users/meihuaren/personal/OR_2018fall/Courses/E4720 Deep Learning/project_coding/Team E_code/'
+new_features_resultpath = 'F:/Columbia OR/IEORE4720 Deep Learning/Course Project/Meihua Ren/'
 filename = new_features_resultpath + 'total_data.csv'
 total_data.to_csv(filename)
 
+# select features
 
+data = total_data.loc[:,['mid_price_mov','ask_price_1','ask_vol_1','bid_price_1','bid_vol_1','liq_imb_1','liq_imb_2'\
+                         ,'mid_price_inv_vol_weighted','relative_mid_price_trend','relative_spread','lastest_trade_price','effective_spread']]
+    
+data = data.dropna()
+
+data.rename(columns = {'mid_price_mov':'label'}, inplace = True)
+
+data_0_1 = (data - np.min(data,axis=0)) / (np.max(data,axis=0) - np.min(data,axis=0))
+
+data_0_1.loc[:,'label'] = data.loc[:,'label'].astype(int)
+
+data_0_1.to_csv('F:/Columbia OR/IEORE4720 Deep Learning/Course Project/Data/INTC_0_1_Megan.csv',index=False)
