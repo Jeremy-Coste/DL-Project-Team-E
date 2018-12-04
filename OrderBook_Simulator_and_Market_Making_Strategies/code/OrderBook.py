@@ -16,7 +16,6 @@ class OrderBook():
         messsages contains all updates to limit order book
         limit_order_book contains the state of the book at all timestamps
         n is number of levels
-        
         '''
         self._messages = pd.read_csv(os.path.join(path, 'data', message_filename), header=None)
         self._limit_order_book = pd.read_csv(os.path.join(path, 'data', orderbook_filename), header=None)
@@ -45,21 +44,13 @@ class OrderBook():
         self._stored_bookstates = {}
         self._stored_messages = {}
         
-    def get_midprice_data(self, numupdates=None, timeunit=None, t_start=34200.1,
+    def get_midprice_data(self, numupdates=1, t_start=34200.1,
                           t_end=57599.9, tick_size=None, next_move=False):
         '''
         Here we compute midprices, and store y(previous), y(current), and y(next)
-        If we wish to slice by time, set by_message_updates = False and
-                enter timeunit=1 for seconds, 1e-3 for microseconds and so on
-        If we do not want to count oversized tick movements as midprice movements, 
-        set ticksize to typical tick size.
         '''
         if t_start < self.tstart or t_end > self.tend:
             raise Exception("Invalid time")
-        if numupdates is None and timeunit is None:
-            raise Exception("Must set either numupdates or timeunit")
-        if not numupdates is None and not timeunit is None:
-            raise Exception("Must set either numupdates or timeunit but not both")
            
         midprices = pd.DataFrame((self._limit_order_book['ap1'] + self._limit_order_book['bp1'])/2.0,
                                   index= self._limit_order_book.index, columns=['midprice'])
@@ -68,56 +59,17 @@ class OrderBook():
         midprices['bp1'] = self._limit_order_book['bp1']
         midprices['bq1'] = self._limit_order_book['bq1']
         midprices['index_position'] = range(len(midprices))
-        if timeunit is None:
-            midprices = midprices.iloc[0::numupdates]
-            midprices = midprices.loc[t_start:t_end]
-            midprices.reset_index(inplace=True)
-            midprices.drop_duplicates(subset='timestamp', keep='last', inplace=True)
-            midprices.set_index('timestamp', inplace=True)
-        else:
-            midprices = midprices.loc[t_start:t_end]
-            timestamps = []
-            count = 1
-            for ind in midprices.index.tolist():
-                if (ind - t_start)/(1.0*timeunit) >= count:
-                    count += 1.0
-                    timestamps += [True]
-                else:
-                    timestamps += [False]
-                    
-            midprices = midprices.loc[timestamps]
-            midprices.reset_index(inplace=True)
-            midprices.drop_duplicates(subset='timestamp', keep='last', inplace=True)
-            midprices.set_index('timestamp', inplace=True)
-            count = 0
-            t = t_start
-            timestamps = []
-            prices = []
-            while(count < len(midprices)):
-                t += timeunit
-                if(t > midprices.index[count]):
-                    new_mid = midprices.values[count]
-                    count += 1
-                    timestamps += [t]
-                    prices += [new_mid]
-                    continue
-                if not timestamps:
-                    continue
-                timestamps += [t]
-                prices += [new_mid]
-                
-            midprices = pd.DataFrame(prices, index=timestamps, columns=['midprice', 'ap1', 
-                                                                        'aq1', 'bp1', 'bq1', 'index_position'])
-            midprices.index.name = 'timestamp'
-            midprices = midprices.loc[t_start:t_end]
-                
-                
+        
+        midprices = midprices.iloc[0::numupdates]
+        midprices = midprices.loc[t_start:t_end]
+        midprices.reset_index(inplace=True)
+        midprices.drop_duplicates(subset='timestamp', keep='last', inplace=True)
+        midprices.set_index('timestamp', inplace=True)
+   
         midprices['y_0'] = np.sign(midprices['midprice'] - midprices['midprice'].shift(1))
         midprices['iloc'] = [i for i in range(len(midprices))]
         if not tick_size is None:
-            '''
-            we only count midprice movements that widen the spread (or maintain spread size)
-            '''
+            #we only count midprice movements that widen the spread (or maintain spread size)
             bools = (abs(midprices['ap1'].shift(1) - midprices['bp1'].shift(1)) <=
                      1.01*abs(midprices['ap1'] - midprices['bp1']))
             
@@ -125,10 +77,12 @@ class OrderBook():
             
         midprices['movement'] = midprices['y_0'].copy()
         if next_move:
+            #look for next midprice move
             change_df = midprices.loc[midprices['y_0'] != 0][['y_0', 'iloc']]
             change_df.set_index('iloc', inplace=True)
             change_df= change_df.reindex_axis(range(len(midprices)), method='backfill')
             midprices['y_0'] = change_df.values
+            
         midprices['y_1'] = midprices['y_0'].shift(-1)
         midprices['y_prev'] = midprices['y_0'].shift(1)
 
@@ -217,6 +171,3 @@ class OrderBook():
         self._stored_bookstates = {}
         self._stored_messages = {}
         
-        
-        
-

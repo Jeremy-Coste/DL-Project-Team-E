@@ -275,6 +275,9 @@ class Order():
     def get_current_level(self):
         return self._level
     
+    def get_current_time(self):
+        return self._t
+    
     def get_queue_position(self):
         return self._queue_position
     
