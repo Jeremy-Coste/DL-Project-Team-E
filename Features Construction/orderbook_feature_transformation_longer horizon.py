@@ -303,5 +303,5 @@ new_features_resultpath = '/Users/meihuaren/personal/OR_2018fall/Courses/E4720 D
 #filename1 = new_features_resultpath + 'total_data.csv'
 #total_data.to_csv(filename1)
 
-filename2 = new_features_resultpath + 'all_features_new_intc_1s_fillna_time00.csv'
+filename2 = new_features_resultpath + 'all_features_new_intc_1s_fillna_time.csv'
 all_features.to_csv(filename2,index=True)
