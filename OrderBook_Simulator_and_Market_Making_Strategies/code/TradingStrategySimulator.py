@@ -29,22 +29,11 @@ class TradingStrategyBacktester:
         self._mkt_move = False  
         self._tick_size = tick_size
         self._orderbook = book
-        
-        #latency[0] refers to the delay in quotes that we receive
-        if latency[0] > 0:
-            pred = self._midprice_df['y_predict']
-
-            new_ind = [pred.index[i] + latency[0] for i in range(len(self._midprice_df))]
-            pred = pred.reindex_axis(new_ind, method='ffill')
-            pred = pred.reindex_axis(self._midprice_df.index, method='ffill')
-            self._midprice_df['y_predict'] = pred
-
-        self._midprice_df.dropna(inplace=True)
 
         #latency[1] is the delay in sending/receiving orders...
         if latency[1] > 0:
             new_ind = []
-            self._midprice_df['timestamp'] = [math.ceil(ind/latency[1])*latency[1] 
+            self._midprice_df['timestamp'] = [math.ceil(ind/(2*latency[1]))*2*latency[1] 
                                               for ind in self._midprice_df.index]
             self._midprice_df.drop_duplicates(subset='timestamp', keep='last', inplace=True)
             self._midprice_df.set_index('timestamp', inplace=True, drop=True)
@@ -66,13 +55,39 @@ class TradingStrategyBacktester:
         self._predict_ind = self._midprice_df.columns.get_loc('y_predict')
         self._mid_ind = self._midprice_df.columns.get_loc('midprice')
         self._y0_ind = self._midprice_df.columns.get_loc('y_0')
+        self._index_series = self._midprice_df['index_position'].copy()
         #set exposure levels
         self._max_exposure = max_exposure_dict
         self._long_position = 0.0
         self._short_position = 0.0
         self._spread_signal = 0
+        self._entry_exit_ind = 0
+        self._positions_as_of = 0
         self._mkt_spread = False
-
+        self._reference_time = 0
+        
+        
+    def _set_entry_exit_ind(self, ind):
+        '''
+        time an order placed or cancelled now is actually placed or cancelled
+        note that the actual current time is midprice_df.index[ind] + latency[0]   
+        '''
+        self._reference_time = self._midprice_df.index[ind] + self._latency[1] + self._latency[0]
+        self._entry_exit_ind = self._index_series.values[ind]
+        self._entry_exit_ind += 1
+        while self._orderbook.get_current_time(self._entry_exit_ind) <= self._reference_time:
+            self._entry_exit_ind += 1
+        self._entry_exit_ind -= 1
+        
+    def _set_positions_known_time(self, ind):
+        '''time positions are known when we reach next step'''
+        reference_time = self._midprice_df.index[ind + 1] - self._latency[1] + self._latency[0]
+        self._positions_as_of = self._index_series.values[ind]
+        self._positions_as_of += 1
+        while self._orderbook.get_current_time(self._positions_as_of) <= reference_time:
+            self._positions_as_of += 1
+        self._positions_as_of -= 1
+        
         
     def _arrange_keys(self):
         new_bids = {}
@@ -91,10 +106,7 @@ class TradingStrategyBacktester:
                     
         self._bid_orders = new_bids
         self._ask_orders = new_asks
-                        
     
-        
-        
     def _update_all_signals(self, ind, y_pred, y_actual):
         mkt_prev_bid_ask = (self._midprice_df.values[ind, self._bp1_ind],
                              self._midprice_df.values[ind, self._ap1_ind])
@@ -111,7 +123,7 @@ class TradingStrategyBacktester:
             self._active = 0
             self._close = True
             self._spread_signal = 0
-            self._arrange_keys()
+            
             
         if self._mkt_spread:      
             self._spread_signal += y_pred[0]
@@ -120,7 +132,12 @@ class TradingStrategyBacktester:
     def _activate_and_deactivate_strategy(self, ind, y_pred, y_actual):
         #right now signal is just sign of average of past observed midprice predictions since last movement
         #may later add in some exponential decay to place more weight on new signals coming in from our RNN
-        self._arrange_keys()
+        if 1 in self._bid_orders and self._active == 0 and self._spread_signal <= 0 and self._mkt_spread:
+            self._cancel_bidask[0] = True
+            
+        if 1 in self._ask_orders and self._active == 0 and self._spread_signal >= 0 and self._mkt_spread:
+            self._cancel_bidask[1] = True      
+        
         if self._long_position + self._short_position != 0 and self._mkt_spread and not self._close:
             if self._active == 0 and self._short_position > self._long_position and self._spread_signal < 0:
                 self._active = 1
@@ -158,110 +175,15 @@ class TradingStrategyBacktester:
         if self._long_position + self._short_position != 0 and not self._mkt_spread:
             self._close = True
                  
-    def _place_orders(self, ind, y_pred, y_actual):
-        
-        active_strategy = self._strategy[y_pred[0]]
-        
-        bids_to_add = active_strategy[0]
-        asks_to_add = active_strategy[1]
-        
-        #check if there exist a previously placed order (from last update) on levels we want to place orders!
-        #as these orders will be ahead of new orders in queue
-        if not y_pred[-1] is None:
-            self._arrange_keys()
-            keep_bids = {}
-            keep_asks = {}
-            for bid in bids_to_add:
-                keys = list(self._bid_orders.keys())
-                for key in sorted(keys, reverse=True):
-                    if self._bid_orders[key].order_type("open") and self._bid_orders[key].get_current_level() == bid:
-                        keep_bids[bid] = self._bid_orders[key]
-                        
-            for ask in asks_to_add:
-                keys = list(self._ask_orders.keys())
-                for key in sorted(keys, reverse=True):
-                    if self._ask_orders[key].order_type("open") and self._ask_orders[key].get_current_level() == ask:
-                        keep_asks[ask] = self._ask_orders[key]
-                      
-            self._bid_orders = keep_bids
-            self._ask_orders = keep_asks
-                        
-                  
-        for bid in bids_to_add:
-            if bid in self._bid_orders or bid == 1:
-                continue
-            
-            self._bid_orders[bid] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=bid,
-                                                         index_ser=self._midprice_df['index_position'],
-                                                         ind_start=ind + 1,
-                                                         is_buy=True) 
-        for ask in asks_to_add:
-            if ask in self._ask_orders or ask == 1:
-                continue
-            
-            self._ask_orders[ask] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=ask,
-                                                         index_ser=self._midprice_df['index_position'],
-                                                         ind_start=ind + 1,
-                                                         is_buy=False)
-                 
-    def _place_level_1_orders(self, ind, y_pred, y_actual):
-        #this is the ONLY time and section where we place level 1 limit orders...
-        #we only place level 1 orders as soon as a new bid-ask spread of 1 tick is confirmed by us
-        cash_flow = 0
-        if not self._mkt_spread:
-            return
-        if self._mkt_move or self._activate_bidask[0] or self._activate_bidask[1]:
-            bid_price = self._midprice_df.values[ind, self._bp1_ind]  
-            ask_price = self._midprice_df.values[ind, self._ap1_ind]
-            new_bid = True
-            new_ask = True
-            
-            self._arrange_keys()
-            #place new orders at level 1 if the order price does not exist and we recently had a midprice move
-            if 1 not in self._bid_orders and 1 in self._strategy[y_pred[0]][0]:
-                if self._spread_signal > 0 or self._activate_bidask[0]:
-                    self._bid_orders[1] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=1,
-                                                               index_ser=self._midprice_df['index_position'],
-                                                               ind_start=ind + 1,
-                                                               is_buy=True)
-                    
-                    new_bid = True
-                    self._activate_bidask[0] = False
-                    
-
-            if 1 not in self._ask_orders and 1 in self._strategy[y_pred[0]][1]:
-                if self._spread_signal < 0 or self._activate_bidask[1]:
-                    self._ask_orders[1] = ou.IndexTrackedOrder(orderbook=self._orderbook, level=1,
-                                                               index_ser=self._midprice_df['index_position'],
-                                                               ind_start=ind + 1,
-                                                               is_buy=False)
-                    new_ask = True
-                    self._activate_bidask[1] = False
-                    
-            if new_bid or new_ask:
-                self._mkt_move = False
-                
-        if 1 in self._bid_orders and self._active == 0 and self._spread_signal <= 0:
-            
-            self._cancel_bidask[0] = True
-            self._arrange_keys()
-            
-            
-        if 1 in self._ask_orders and self._active == 0 and self._spread_signal >= 0:
-            self._cancel_bidask[1] = True
-            self._arrange_keys()         
-        
-                
-        self._arrange_keys()
         
     def _update_orders(self, ind):
-        #now we update our orders to next step
+        #now we update our orders entry_exit_position
         for bid in self._bid_orders:
-            while(self._bid_orders[bid].get_current_index() < ind + 1):
-                self._bid_orders[bid].update()
+            while(self._bid_orders[bid].get_current_index() < ind and self._bid_orders[bid].order_type("open")):
+                self._bid_orders[bid].process_message()
         for ask in self._ask_orders:
-            while(self._ask_orders[ask].get_current_index() < ind + 1):
-                self._ask_orders[ask].update()
+            while(self._ask_orders[ask].get_current_index() < ind and self._ask_orders[ask].order_type("open")):
+                self._ask_orders[ask].process_message()
             
         #cancel orders if still possible...
         if self._cancel_bidask[0]:
@@ -271,34 +193,11 @@ class TradingStrategyBacktester:
             self._ask_orders[1].cancel_order()
             self._cancel_bidask[1] = False
                  
-    def _execute_orders(self, ind, y_pred, y_actual):
-        cash_flow = 0.0
-        #now we see which orders are filled and adjust for profit
-        for bid in self._bid_orders.keys():
-            if self._bid_orders[bid].order_type("executed"):
-                
-                price = self._bid_orders[bid].get_order_price()
-                cash_flow -= price
-                self._long_position += 1
-                
-                    
-        for ask in self._ask_orders.keys():
-            if self._ask_orders[ask].order_type("executed"):
-                
-                price = self._ask_orders[ask].get_order_price()
-                cash_flow += price
-                self._short_position += 1
-                
-                
-                         
-        return cash_flow
-                 
     def _close_positions(self, ind, y_pred, y_actual):
         cash_flow = 0.0
-        mkt_bid_ask = (self._midprice_df.values[ind + 1, self._bp1_ind],
-                   self._midprice_df.values[ind + 1, self._ap1_ind])
+        mkt_bid_ask = (self._orderbook.get_book_state(self._entry_exit_ind)[2],
+                       self._orderbook.get_book_state(self._entry_exit_ind)[0])
         
-    
         #net long
         if self._long_position > self._short_position:
             num_to_close = 0
@@ -337,21 +236,135 @@ class TradingStrategyBacktester:
         self._close = False
         return cash_flow
     
+    def _place_orders(self, ind, y_pred, y_actual):
+        
+        active_strategy = self._strategy[y_pred[0]]
+        
+        bids_to_add = active_strategy[0]
+        asks_to_add = active_strategy[1]
+        
+        #check if there exist a previously placed order (from last update) on levels we want to place orders!
+        #as these orders will be ahead of new orders in queue
+        if not y_pred[-1] is None:
+            self._arrange_keys()
+            keep_bids = {}
+            keep_asks = {}
+            for bid in bids_to_add:
+                keys = list(self._bid_orders.keys())
+                for key in sorted(keys, reverse=True):
+                    if self._bid_orders[key].order_type("open") and self._bid_orders[key].get_current_level() == bid:
+                        keep_bids[bid] = self._bid_orders[key]
+                        
+            for ask in asks_to_add:
+                keys = list(self._ask_orders.keys())
+                for key in sorted(keys, reverse=True):
+                    if self._ask_orders[key].order_type("open") and self._ask_orders[key].get_current_level() == ask:
+                        keep_asks[ask] = self._ask_orders[key]
+                      
+            self._bid_orders = keep_bids
+            self._ask_orders = keep_asks
+                        
+                  
+        for bid in bids_to_add:
+            if bid in self._bid_orders or bid == 1:
+                continue
+            self._bid_orders[bid] = ou.Order(orderbook=self._orderbook, level=bid, timestamp=self._reference_time,
+                                             index_ref=self._entry_exit_ind, is_buy=True)
+        for ask in asks_to_add:
+            if ask in self._ask_orders or ask == 1:
+                continue
+            
+            self._ask_orders[ask] = ou.Order(orderbook=self._orderbook, level=ask, timestamp=self._reference_time,
+                                             index_ref=self._entry_exit_ind, is_buy=False)
+                 
+    def _place_level_1_orders(self, ind, y_pred, y_actual):
+        #this is the ONLY time and section where we place level 1 limit orders...
+        #we only place level 1 orders as soon as a new bid-ask spread of 1 tick is confirmed by us
+        cash_flow = 0
+        if not self._mkt_spread:
+            return
+        if self._mkt_move or self._activate_bidask[0] or self._activate_bidask[1]:
+            bid_price = self._midprice_df.values[ind, self._bp1_ind]  
+            ask_price = self._midprice_df.values[ind, self._ap1_ind]
+            new_bid = True
+            new_ask = True
+            
+            self._arrange_keys()
+            #place new orders at level 1 if the order price does not exist and we recently had a midprice move
+            if 1 not in self._bid_orders and 1 in self._strategy[y_pred[0]][0]:
+                if self._spread_signal > 0 or self._activate_bidask[0]:
+                    self._bid_orders[1] = ou.Order(orderbook=self._orderbook, level=1, timestamp=self._reference_time,
+                                                   index_ref=self._entry_exit_ind, is_buy=True)
+                    
+                    new_bid = True
+                    self._activate_bidask[0] = False
+                    
+
+            if 1 not in self._ask_orders and 1 in self._strategy[y_pred[0]][1]:
+                if self._spread_signal < 0 or self._activate_bidask[1]:
+                    self._ask_orders[1] = ou.Order(orderbook=self._orderbook, level=1, timestamp=self._reference_time,
+                                                   index_ref=self._entry_exit_ind, is_buy=False)
+                    new_ask = True
+                    self._activate_bidask[1] = False
+                    
+            if new_bid or new_ask:
+                self._mkt_move = False
+                
+        self._arrange_keys()
+        
+        
+    def _execute_orders(self, y_pred, y_actual):
+        cash_flow = 0.0
+        #now we see which orders are filled and adjust for profit
+        for bid in self._bid_orders.keys():
+            if self._bid_orders[bid].order_type("executed"):
+
+                price = self._bid_orders[bid].get_order_price()
+                cash_flow -= price
+                self._long_position += 1
+
+
+        for ask in self._ask_orders.keys():
+            if self._ask_orders[ask].order_type("executed"):
+
+                price = self._ask_orders[ask].get_order_price()
+                cash_flow += price
+                self._short_position += 1
+                
+        self._arrange_keys()
+
+        return cash_flow
+    
     
     def _step(self, ind, y_pred, y_actual):
+        '''note that the actual current time at beginning of every step is midprice_df.index[ind] + latency[0]'''
         cash_flow = 0.0
         
-        #update signals, place orders as we would at step ind
+        #set order entry index
+        self._set_entry_exit_ind(ind)
+        
+        #update signals (all at exit entry index give info up to current index)
         self._update_all_signals(ind, y_pred, y_actual)  
         self._activate_and_deactivate_strategy(ind, y_pred, y_actual)
+        
+        #now we step to exit_entry_ind which is latency[1] further in time
+        self._update_orders(self._entry_exit_ind)
+        
+        #this all occurs at exit_entry_ind
+        cash_flow += self._close_positions(ind, y_pred, y_actual)
+        cash_flow += self._execute_orders(y_pred, y_actual)
         self._place_orders(ind, y_pred, y_actual)
         self._place_level_1_orders(ind, y_pred, y_actual)
         
-        #now we step to ind + 1
-        self._update_orders(ind)
-        cash_flow += self._execute_orders(ind, y_pred, y_actual)
-        cash_flow += self._close_positions(ind, y_pred, y_actual)
-                 
+        #set positions known time, this is midprice_df.index[ind + 1] + latency[0] - latency[1]
+        self._set_positions_known_time(ind)
+        
+        #update all orders to positions known time
+        self._update_orders(self._positions_as_of)
+
+        #now execute all orders up until positions known time
+        cash_flow += self._execute_orders(y_pred, y_actual)
+        
         return cash_flow
     
     def run_strategy(self, tstart=None, tend=None):
@@ -387,7 +400,9 @@ class TradingStrategyBacktester:
             pnl = self._step(i, y_pred, y_actual)
             
             cum_pnl += pnl
-            time = self._midprice_df.index[i + 1]
+            
+            #current time after the step above
+            time = self._midprice_df.index[i + 1] + self._latency[0]
             
             midprice = self._midprice_df.values[i + 1, self._mid_ind]
             adjust = self._long_position*midprice - self._short_position*midprice
@@ -405,7 +420,7 @@ class TradingStrategyBacktester:
                 
         self._pnl_ser = pd.Series()
         self._pnl_ser.index.name = 'timestamp'
-        self._pnl_ser = pd.Series(pnl_ser, index=self._midprice_df.index[start_ind:end_ind])             
+        self._pnl_ser = pd.Series(pnl_ser, index=self._midprice_df.index[start_ind:end_ind] + self._latency[0])             
         self._pnl_ser = self._pnl_ser - self._pnl_ser.shift(1)
         self._pnl_ser.fillna(0.0, inplace=True)
         self._orderbook.clear_memory()

@@ -161,7 +161,7 @@ class Order():
         return False
 
     
-    def _process_message(self):
+    def process_message(self):
         #grab new updated data
         '''
         something still wrong with queue movement, either some logic is off
@@ -290,6 +290,9 @@ class Order():
     def cancel_order(self):
         if self._orderstate == 'open':
             self._orderstate = 'cancelled'
+            
+    def get_current_index(self):
+        return self._index_pos
     
 class TimeOrder(Order):
     '''Use this class for strategies that reevaluate orders by given timestep delta_t (in seconds)'''
@@ -304,7 +307,7 @@ class TimeOrder(Order):
         self._time_to_step += self._dt
         self._t_next = self._orderbook.get_current_time(self._index_pos + 1)
         while(self._t_next <= self._time_to_step and self._orderstate == "open"):
-            self._process_message()
+            self.process_message()
             self._t_next = self._orderbook.get_current_time(self._index_pos + 1)
     
 class BookUpdatesOrder(Order):
@@ -318,26 +321,4 @@ class BookUpdatesOrder(Order):
     def update(self):
         self._index_to_step += self._numupdates
         while(self._index_pos < self._index_to_step and self._orderstate == "open"):
-            self._process_message()
-
-class IndexTrackedOrder(Order):
-    '''use this class for strategies that build orders around a given index_reference series for backtesting'''
-    def __init__(self, orderbook, level, is_buy, index_ser, ind_start):
-        self._index_ser = index_ser.astype(int)
-        self._current_index_ref = ind_start
-        self._book_position = self._index_ser.values[self._current_index_ref]
-        Order.__init__(self, orderbook=orderbook, level=level, is_buy=is_buy, index_ref=self._book_position,
-                       timestamp=self._index_ser.index[ind_start])
-        
-        
-    def update(self):
-        self._current_index_ref += 1
-        self._book_position = self._index_ser.values[self._current_index_ref]
-        while(self._index_pos < self._book_position and self._orderstate == "open"):
-            self._process_message()
-            
-    def get_current_index(self):
-        return self._current_index_ref
-            
-                        
-        
+            self.process_message()
