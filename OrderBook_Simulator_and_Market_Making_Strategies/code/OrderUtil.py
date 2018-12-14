@@ -19,8 +19,8 @@ class Order():
 
         inputs
         --------
-        orderbook: OrderBook object. Contians the limit order book data associated with given equity symbol.
-        timestamp: Float. Conatins the time we enter the order (will round up to nearest time in orderbook data)
+        orderbook: OrderBook object. Contains the limit order book data associated with given equity symbol.
+        timestamp: Float. Contains the time we enter the order (will round up to nearest time in orderbook data)
         level: positive int. What level we place our order (1 = inside market, 2 = 1 level away from best bid/ask, ...)
         is_buy: bool. Set to true for our order to be a bid, false for an ask.
         index_ref: Int. Set to an index reference if desired to place our order at that specific location in orderbook data.
