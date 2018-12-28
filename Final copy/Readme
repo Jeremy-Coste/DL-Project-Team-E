@@ -3,5 +3,7 @@ The codes under this folder is the main result of our project.
 The codes are divided into two parts. Part 1 is about features construction, data preprocessing and 2-label mid-price movement 
 predition. Part 2 is about market making strategy using predicted mid-price movement.
 
-To run the code, first you need to go to website () to download and rename them to , respectively. Then you need to run m sequentialy
-to get the desired result.
+To run the code, first you need to go to website 'https://lobsterdata.com/info/DataSamples.php' to download 
+'INTC_2012-06-21_34200000_57600000_orderbook_5.csv' and 'INTC_2012-06-21_34200000_57600000_message_5.csv'
+and rename them as 'INTC_OrderBook.csv' and 'INTC_message.csv', respectively. Then you need to run 
+'Mid-Price Movement Prediction.ipynb' and 'Strategy_Using_RNN_Predictions.ipynb' sequentially to get the desired result.
