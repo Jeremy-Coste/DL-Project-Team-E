@@ -51,19 +51,19 @@ if method == 'select_k_best_f_classif':
     from sklearn.feature_selection import f_classif
     model_fs = SelectKBest(f_classif, k=15).fit(x_train, y_train) # grid search for the parameter
 
-#-- method 2-2 SelectFdr: f_classif # no use
+#-- method 2-2 SelectFdr: f_classif
 if method == 'select_fdr_f_classif':
     from sklearn.feature_selection import SelectFdr
     from sklearn.feature_selection import f_classif
     model_fs = SelectFdr(f_classif, alpha=1e-7).fit(x_train, y_train) # grid search for the parameter
     
-#-- method 2-3 SelectFwe: f_classif # no use==
+#-- method 2-3 SelectFwe: f_classif
 if method == 'select_fwe_f_classif':
     from sklearn.feature_selection import SelectFwe
     from sklearn.feature_selection import f_classif
     model_fs = SelectFwe(f_classif, alpha=0.0001).fit(x_train, y_train)
 
-#-- method 3 RFECV: SVC # too slow
+#-- method 3 RFECV: SVC
 if method == 'rfecv_svc':
     from sklearn.feature_selection import RFECV
     from sklearn.svm import SVC
@@ -71,7 +71,7 @@ if method == 'rfecv_svc':
     model_fs_pre = RFECV(estimator=svc, step=1, cv=5)
     model_fs = model_fs_pre.fit(x_train, y_train)
 
-#-- method 4-1 select from model: LinearSVC (L1-based) # too slow?
+#-- method 4-1 select from model: LinearSVC (L1-based)
 if method == 'select_from_model_linear_svc':
     from sklearn.svm import LinearSVC
     from sklearn.feature_selection import SelectFromModel
