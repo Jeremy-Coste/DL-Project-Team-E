@@ -1,8 +1,9 @@
-For our main results, please refer to the instruction under folder 'Final copy'. 
+For our main results, please refer to the instructions under folder:
+    1.'Replication': 3-label mid-price movement prediction at next print
+    2.'Final copy': 2-label mid-price movement prediction at next print and market making strategy
 
-For the 3-lables mid-price movement prediction, pleae refer to the instruction under folder 'Replication'
-
-We also uploaded our other attempts here:
+For other detailed attempts, please refer to the instructions under folder:
+    1.
     features engineering;
     prediction in a longer horizon;
     prediction within sector.
