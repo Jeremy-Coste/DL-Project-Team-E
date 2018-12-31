@@ -1,9 +1,9 @@
 For our main results, please refer to the instructions under folder:
-    1.'Replication/Mid-Price Movment Prediction': 3-label mid-price prediction at next print
+    1.'Replication/Mid-Price Movement Prediction': 3-label mid-price prediction at next print
     2.'Final copy': feature construction, 2-label mid-price prediction at next print and market making strategy
 
 For other detailed attempts, please refer to the instructions under folder:
     1.'Features Selection': various supervised and unsupervised dimension reduction attempts
-    2.'Mid-Price Movment Prediction_Longer Horizon': 3-label mid-price prediction in 1s
-    3.'Mid-Price Movment Prediction_Within Sector': mid-price prediction at next print with MSFT as test 
+    2.'Mid-Price Movement Prediction_Longer Horizon': 3-label mid-price prediction in 1s
+    3.'Mid-Price Movement Prediction_Within Sector': mid-price prediction at next print with MSFT as test 
     4.'OrderBook_Simulator_and_Market_Making_Strategies': orderbook demo and market making strategy research
