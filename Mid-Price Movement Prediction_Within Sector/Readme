@@ -1,6 +1,7 @@
 Mid-price movement prediction within sector can be done in the following process:
 
-1. orderbook_feature_transformation_without fillna and timestamp.py: 
+1. download data from 'https://lobsterdata.com/info/DataSamples.php'
+2. orderbook_feature_transformation_without fillna and timestamp.py: 
    tranform original INTC and MSFT orderbook data to feature data without fillna and timestamp
-2. Mid_Price_Prediction_INTC_MSFT.ipynb:
+3. Mid_Price_Prediction_INTC_MSFT.ipynb:
    predict mid-price movement using LSTM
