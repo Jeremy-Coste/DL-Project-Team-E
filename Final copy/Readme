@@ -5,6 +5,6 @@ The codes under this folder are the main results of our project, which are divid
 To get the desired result: 
   First, go to 'https://lobsterdata.com/info/DataSamples.php'; 
          download 'INTC_2012-06-21_34200000_57600000_orderbook_5.csv' and 'INTC_2012-06-21_34200000_57600000_message_5.csv';
-         rename them as 'INTC_OrderBook.csv' and 'INTC_message.csv', respectively;
+         rename them as 'INTC_OrderBook.csv' and 'INTC_message.csv' respectively;
          place both data files in the 'data' folder.
   Then,  run 'Mid-Price Movement Prediction.ipynb' and 'Strategy_Using_RNN_Predictions.ipynb' sequentially.
