@@ -7,3 +7,16 @@ For other detailed attempts, please refer to the instructions under folder:
     2.'Mid-Price Movement Prediction_Longer Horizon': 3-label mid-price prediction in 1s
     3.'Mid-Price Movement Prediction_Within Sector': 3-label mid-price prediction at next print with MSFT as test 
     4.'OrderBook_Simulator_and_Market_Making_Strategies': orderbook demo and market making strategy research
+    
+
+References：
+    Matthew Dixon, A High Frequency Trade Execution Model for Supervised Learning, December 5, 2017.
+    Matthew Dixon, Sequence Classification of the Limit Order Book using Recurrent Neural Networks, July 14, 2017.
+    Yuriy Nevmyvaka, Yi Feng, and Michael Kearns, Reinfrocment Learning for Optimized Trade Ex- ecution, 2006.
+    Michael Kearns and Yuriy Nevmyvaka, Machine Learning for Market Microstructure and High Frequency Trading, 2013.
+    Irene Aldridge, High-frequency trading - a practical guide to algorithmic strategies and trading systems, 2013.
+    Angelo Ranaldo, Order aggressiveness in limit order book markets, 2004.
+    Yakov Amihud, Illiquidity and stock returns: cross-section and time-series effects, 2002. 
+    Wojciech Zaremba and Ilya Sutskever, Recurrent Neural Network Regularization, 2015. 
+    https://lobsterdata.com/info/DataSamples.php
+    https://github.com/Quiota/tensorflow
