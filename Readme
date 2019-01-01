@@ -5,7 +5,7 @@ For our main results, please refer to the instructions under folder:
 For other detailed attempts, please refer to the instructions under folder:
     1.'Features Selection': various supervised and unsupervised dimension reduction attempts
     2.'Mid-Price Movement Prediction_Longer Horizon': 3-label mid-price prediction in 1s
-    3.'Mid-Price Movement Prediction_Within Sector': 3-label mid-price prediction at next print with MSFT as test 
+    3.'Mid-Price Movement Prediction_Within Sector': 3-label mid-price prediction at next point with MSFT as test 
     4.'OrderBook_Simulator_and_Market_Making_Strategies': orderbook demo and market making strategy research
     
 
